@@ -1,5 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
+using System.Text;
 using Newtonsoft.Json.Linq;
 
 namespace AnyTreeXPath.Json
@@ -66,14 +69,26 @@ namespace AnyTreeXPath.Json
             return new JObjectXPathElement(jArrayItem);
         }
 
-        public IEnumerable<IXPathAttribute> GetAttributes()
+        public virtual IEnumerable<IXPathAttribute> GetAttributes()
         {
-            yield return new XPathAttribute("type", ((_jObject as JProperty)?.Value ?? _jObject).Type.ToString());
+            if (_jObject is JProperty)
+            {
+                // type of inner node, if current node is JProperty
+                yield return new XPathAttribute("valuetype", (_jObject as JProperty).Value.Type.ToString());
+            }
+            // type of current node
+            yield return new XPathAttribute("type", _jObject.Type.ToString());
         }
 
         public string GetText()
         {
-            return _jObject.ToString();
+            var jValue = _jObject as JValue;
+            return Convert.ToString(jValue?.Value, CultureInfo.InvariantCulture);
+        }
+
+        public bool HasText
+        {
+            get { return _jObject is JValue; }
         }
     }
 }

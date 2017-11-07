@@ -1,10 +1,11 @@
 ﻿namespace AnyTreeXPath
 {
     /// <summary>
-    /// Indicates that object supports querying 'text()'
+    /// Support querying 'text()'
     /// </summary>
     public interface ITextProvider
     {
         string GetText();
+        bool HasText { get; }
     }
 }

@@ -4,11 +4,11 @@ namespace AnyTreeXPath.Json
 {
     public class JObjectXPathNavigator:AnyTreeXPathNavigator
     {
-        public JObjectXPathNavigator(JObjectXPathElement rootElement) : base(rootElement)
+        public JObjectXPathNavigator(JObjectXPathElement root) : base(root)
         {
         }
 
-        public JObjectXPathNavigator(JObject rootControl):base(new JObjectXPathElement(rootControl))
+        public JObjectXPathNavigator(JObject root):base(new JObjectXPathElement(root))
         {
         }
     }

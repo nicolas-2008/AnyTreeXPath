@@ -59,9 +59,14 @@ namespace AnyTreeXPath
                 {
                     return _sourceAttributeNode.Attribute.GetValue();
                 }
+                else if (_nodeType == XPathNodeType.Text)
+                {
+                    return (string)_sourceElementNode.Element.UnderlyingObject;
+                }
                 else
                 {
-                    throw new InvalidOperationException();
+                    ITextProvider textProvider = _sourceElementNode.Element as ITextProvider;
+                    return textProvider?.GetText();
                 }
             }
         }
@@ -265,7 +270,10 @@ namespace AnyTreeXPath
             if (elementNode.Element is ITextProvider)
             {
                 ITextProvider textProvider = elementNode.Element as ITextProvider;
-                childrenEnumerable = childrenEnumerable.Concat(new[] { new TextXPathElement(textProvider) });
+                if (textProvider.HasText)
+                {
+                    childrenEnumerable = childrenEnumerable.Concat(new[] { new TextXPathElement(textProvider) });
+                }
             }
             return childrenEnumerable;
         }
