@@ -34,32 +34,8 @@ namespace AnyTreeXPath.Json
 
         public virtual IEnumerable<IXPathElement> GetChildren()
         {
-            foreach (var jToken in _jObject.Children())
+            foreach (var jToken in EnumerateExpandChildren())
             {
-                // omit array object and yield array items directly
-                JArray jArray = jToken as JArray;
-                if (jArray != null)
-                {
-                    foreach (var jArrayItem in jArray.Children())
-                    {
-                        yield return CreateXPathElement(jArrayItem);
-                    }
-
-                    continue;
-                }
-
-                // omit container object and yield property items directly
-                JObject jObject = jToken as JObject;
-                if (jObject != null)
-                {
-                    foreach (var jObjectProperty in jObject.Children())
-                    {
-                        yield return CreateXPathElement(jObjectProperty);
-                    }
-
-                    continue;
-                }
-
                 yield return CreateXPathElement(jToken);
             }
         }
@@ -71,24 +47,78 @@ namespace AnyTreeXPath.Json
 
         public virtual IEnumerable<IXPathAttribute> GetAttributes()
         {
-            if (_jObject is JProperty)
+            // let's get rid of proprietary Newtonsoft.Json system attributes 'type', 'valuetype' to keep consistency with classical XPath for XML
+            // it should be implemented as something like an extension
+            //if (_jObject is JProperty)
+            //{
+            //    // type of inner node, if current node is JProperty
+            //    yield return new XPathAttribute("valuetype", (_jObject as JProperty).Value.Type.ToString());
+            //}
+
+            //// type of current node
+            //yield return new XPathAttribute("type", _jObject.Type.ToString());
+
+            // yield properties with simple values
+            foreach (JToken jToken in EnumerateExpandChildren())
             {
-                // type of inner node, if current node is JProperty
-                yield return new XPathAttribute("valuetype", (_jObject as JProperty).Value.Type.ToString());
+                JProperty jProperty = jToken as JProperty;
+                if (jProperty != null)
+                {
+                    JValue jValue = jProperty.Value as JValue;
+                    if (jValue != null)
+                    {
+                        yield return new XPathAttribute(jProperty.Name, Convert.ToString(jValue.Value, CultureInfo.InvariantCulture)); 
+                    }
+                }
             }
-            // type of current node
-            yield return new XPathAttribute("type", _jObject.Type.ToString());
         }
 
         public string GetText()
         {
             var jValue = _jObject as JValue;
-            return Convert.ToString(jValue?.Value, CultureInfo.InvariantCulture);
+            if (jValue != null)
+            {
+                return Convert.ToString(jValue?.Value, CultureInfo.InvariantCulture);                
+            }
+
+            return string.Empty;
         }
 
         public bool HasText
         {
             get { return _jObject is JValue; }
+        }
+
+        private IEnumerable<JToken> EnumerateExpandChildren()
+        {
+            foreach (var jToken in _jObject.Children())
+            {
+                // omit array object and yield array items directly
+                JArray jArray = jToken as JArray;
+                if (jArray != null)
+                {
+                    foreach (var jArrayItem in jArray.Children())
+                    {
+                        yield return jArrayItem;
+                    }
+
+                    continue;
+                }
+
+                // omit container object and yield property items directly
+                JObject jObject = jToken as JObject;
+                if (jObject != null)
+                {
+                    foreach (var jObjectProperty in jObject.Children())
+                    {
+                        yield return jObjectProperty;
+                    }
+
+                    continue;
+                }
+
+                yield return jToken;
+            }
         }
     }
 }
