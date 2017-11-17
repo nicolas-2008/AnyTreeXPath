@@ -75,18 +75,37 @@ namespace AnyTreeXPath.Json
 
         public string GetText()
         {
-            var jValue = _jObject as JValue;
+            var jValue = GetJValue();
             if (jValue != null)
             {
-                return Convert.ToString(jValue?.Value, CultureInfo.InvariantCulture);                
+                return Convert.ToString(jValue.Value, CultureInfo.InvariantCulture);                
             }
 
-            return string.Empty;
+            return null;
         }
 
         public bool HasText
         {
-            get { return _jObject is JValue; }
+            get { return GetJValue() != null; }
+        }
+
+        private JValue GetJValue()
+        {
+            if (_jObject is JValue)
+            {
+                return _jObject as JValue;
+            }
+
+            if (_jObject is JProperty)
+            {
+                var jPropertyValue = (_jObject as JProperty).Value;
+                if (jPropertyValue is JValue)
+                {
+                    return jPropertyValue as JValue;
+                }
+            }
+
+            return null;
         }
 
         private IEnumerable<JToken> EnumerateExpandChildren()
