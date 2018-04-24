@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using AnyTreeXPath;
 using AnyTreeXPath.Json;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -13,47 +11,190 @@ namespace UnitTests
     [TestClass]
     public class JsonTests
     {
-        private static JObject CreateTestJObject()
+        [TestMethod]
+        public void QueryObjectItems()
         {
             var json = JObject.Parse(@"
-{
-    test1: 'x3',
-    test2: [ '1', '2', 'x3' ],
-    test3: { 
-             'x1':'1', 
-             'x2':'2', 
-             'x3':31 
-           },
-    test4: { 
-             'x1':'1', 
-             'x2':'2', 
-             'x3':32 
-           },
-    test5: { 
-             'x1':'1', 
-             'x2': [
-                     'a', 
-                     'b', 
-                     ['innerArrItem0', 'innerArrItem1']
-                   ], 
-             'x3':33.3, 
-             'x4':4.0 
-           },
-}
-            ");
+                { 
+                    book:   'C# in a Nutshell', 
+                    author: 'Joseph Albahari',
+                    chapters: ['Chapter 1 Introducing C# and the .NET Framework', 'Chapter 2 C# Language Basics', '...']
+                }");
 
-            return json;
+            var navigator = new JObjectXPathNavigator(json);
+            var queryResult = navigator.Select("/*")
+                .GetResult<JProperty>()
+                .ToList();
+
+            Assert.AreEqual(3, queryResult.Count);
+            Assert.AreEqual("book", queryResult[0].Name);
+            Assert.AreEqual("author", queryResult[1].Name);
+            Assert.AreEqual("chapters", queryResult[2].Name);
+        }
+        
+        [TestMethod]
+        public void QueryArrayItems()
+        {
+            var json = JObject.Parse(@"
+                {
+                  books: [ 
+                    { name: 'C# in a Nutshell',         author: 'Joseph Albahari' }, 
+                    { name: 'Programming WCF Services', author: 'Juval Lowy' } 
+                  ]
+                }");
+
+            var navigator = new JObjectXPathNavigator(json);
+            var queryResult = navigator.Select("/books/*")
+                .GetResult<JObject>()
+                .ToList();
+
+            Assert.AreEqual(2, queryResult.Count);
+            Assert.AreEqual("C# in a Nutshell", queryResult[0].GetValue("name").ToString());
+            Assert.AreEqual("Programming WCF Services", queryResult[1].GetValue("name").ToString());
         }
 
         [TestMethod]
-        public void ComplexQuery()
+        public void QueryArrayItemByPropertyValue()
         {
-            var json = CreateTestJObject();
+            var json = JObject.Parse(@"
+                {
+                  books: [ 
+                    { name: 'C# in a Nutshell',         author: 'Joseph Albahari' }, 
+                    { name: 'Programming WCF Services', author: 'Juval Lowy' } 
+                  ]
+                }");
 
-            var navigator = new AnyTreeXPathNavigator(new JObjectXPathElement(json));
-            var result = navigator.Select("//*[starts-with(name(),'x')]")
-                                  .GetResult<JToken>()
-                                  .ToList();
+            var navigator = new JObjectXPathNavigator(json);
+            var queryResult = navigator.Select("/books/*[@name='Programming WCF Services']")
+                .GetResult<JObject>()
+                .ToList();
+
+            Assert.AreEqual(1, queryResult.Count);
+            Assert.AreEqual("Programming WCF Services", queryResult[0].GetValue("name").ToString());
+            Assert.AreEqual("Juval Lowy", queryResult[0].GetValue("author").ToString());
+        }
+
+        [TestMethod]
+        public void QueryArrayItemByIndex()
+        {
+            var json = JObject.Parse(@"
+                {
+                  books: [ 
+                    { name: 'C# in a Nutshell',         author: 'Joseph Albahari' }, 
+                    { name: 'Programming WCF Services', author: 'Juval Lowy' } 
+                  ]
+                }");
+
+            var navigator = new JObjectXPathNavigator(json);
+            var queryResult = navigator.Select("/books/_2")
+                .GetResult<JObject>()
+                .ToList();
+
+            Assert.AreEqual(1, queryResult.Count);
+            Assert.AreEqual(queryResult[0].GetValue("name").ToString(), "Programming WCF Services");
+            Assert.AreEqual(queryResult[0].GetValue("author").ToString(), "Juval Lowy" );
+        }
+        
+        [TestMethod]
+        public void QueryPropertyByName()
+        {
+            var json = JObject.Parse(@"
+                { 
+                    book:   'C# in a Nutshell', 
+                    author: 'Joseph Albahari' 
+                }");
+
+            var navigator = new JObjectXPathNavigator(json);
+            var queryResult = navigator.Select("/book")
+                                     .GetResult<JProperty>()
+                                     .ToList();
+
+            Assert.AreEqual(1, queryResult.Count);
+            Assert.AreEqual("book", queryResult[0].Name);
+            Assert.AreEqual("C# in a Nutshell", queryResult[0].Value.ToString());
+        }
+
+        [TestMethod]
+        public void QueryPropertyByContent()
+        {
+            var json = JObject.Parse(@"
+                { 
+                    book:   'C# in a Nutshell', 
+                    author: 'Joseph Albahari' 
+                }");
+
+            var navigator = new JObjectXPathNavigator(json);
+            var queryResult = navigator.Select("/author[text()='Joseph Albahari']")
+                .GetResult<JProperty>()
+                .ToList();
+
+            Assert.AreEqual(1, queryResult.Count);
+            Assert.AreEqual("author", queryResult[0].Name);
+            Assert.AreEqual("Joseph Albahari", queryResult[0].Value.ToString());
+        }
+        
+        [TestMethod]
+        public void QueryPropertyValue()
+        {
+            var json = JObject.Parse(@"
+                { 
+                    book:   'C# in a Nutshell', 
+                    author: 'Joseph Albahari' 
+                }");
+
+            var navigator = new JObjectXPathNavigator(json);
+            var queryResult = navigator.Select("/book/text()")
+                .GetResult<string>()
+                .ToList();
+
+            Assert.AreEqual(1, queryResult.Count);
+            Assert.AreEqual("C# in a Nutshell", queryResult[0]);
+        }
+        
+        
+        [TestMethod]
+        public void QueryInnerLevelItems()
+        {
+            var json = JObject.Parse(@"
+                {
+                  books: [ 
+                    { name: 'C# in a Nutshell',         author: 'Joseph Albahari' }, 
+                    { name: 'Programming WCF Services', author: 'Juval Lowy' } 
+                  ]
+                }");
+
+            var navigator = new JObjectXPathNavigator(json);
+            var queryResult = navigator.Select("/books/*/name/text()")
+                .GetResult<string>()
+                .ToList();
+
+            Assert.AreEqual(2, queryResult.Count);
+            Assert.AreEqual("C# in a Nutshell", queryResult[0]);
+            Assert.AreEqual("Programming WCF Services", queryResult[1]);
+        }
+
+        [TestMethod]
+        public void QueryAllItems()
+        {
+            var json = JObject.Parse(@"
+                { 
+                    book:   'C# in a Nutshell', 
+                    author: 'Joseph Albahari',
+                    chapters: ['Chapter 1 Introducing C# and the .NET Framework', 'Chapter 2 C# Language Basics', '...']
+                }");
+
+            var navigator = new JObjectXPathNavigator(json);
+            var queryResult = navigator.Select("//*")
+                .GetResult<JToken>()
+                .ToList();
+
+            Assert.AreEqual(6, queryResult.Count);
+            Assert.AreEqual("book", ((JProperty)queryResult[0]).Name);
+            Assert.AreEqual("author", ((JProperty)queryResult[1]).Name);
+            Assert.AreEqual("chapters", ((JProperty)queryResult[2]).Name);
+            Assert.AreEqual("Chapter 1 Introducing C# and the .NET Framework", ((JValue)queryResult[3]).Value);
+            Assert.AreEqual("Chapter 2 C# Language Basics", ((JValue)queryResult[4]).Value);
+            Assert.AreEqual("...", ((JValue)queryResult[5]).Value);
         }
     }
 }

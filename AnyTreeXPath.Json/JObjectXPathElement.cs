@@ -7,78 +7,101 @@ using Newtonsoft.Json.Linq;
 
 namespace AnyTreeXPath.Json
 {
+    /*
+     * Json is quite similar to XML, however it has some key differences which should be taken into account:
+     *
+     * - Json object ( {} ) has no tag name
+     * - Json array ( [] ) has no tag name
+     * - Json simple value has no tag name 
+     * - Json doesn't separate inner items into attributes and nodes
+     *
+     * The following mappings were implemented to solve these differences and make Json XPath querying more convenient and close to XML: 
+     *
+     * - Json object declaration is omitted, unless it is an array item.
+     * - Json simple value declaration is ommited and treated as a text content, unless it is an array item.
+     * - Array item is named according to its index in the array, with '_' prefix.
+     * - JProperty with a simple value is contained in both - attributes collection and nodes collection.
+     *
+     * JSON:
+     * ---------------------------
+     * {
+     *    property1: "100",
+     *    property2:
+     *      [
+     *          {o1:"123"},
+     *          {o1:"456"}
+     *      ],
+     *    property3: [ 123, 456 ]     
+     * }
+     *----------------------------
+     * Corresponding 'XML':
+     * ---------------------------
+     * <property1>100</property1>
+     * <property2>
+     *   <_1>
+     *     <o1>123</o1>
+     *   </_1>
+     *   <_2>
+     *     <o1>456</o1>
+     *   </_2>
+     * <property2>
+     * <property3>
+     *   <_1>123</_1>
+     *   <_2>456</_2>
+     * <property3>
+     * ---------------------------
+     *
+     */
+
     public class JObjectXPathElement:IXPathElement, ITextProvider
     {
-        private readonly JToken _jObject;
+        protected readonly JTokenDescriptor _jTokenDescriptor;
         
-        public JObjectXPathElement(JObject jObject)
+        public JObjectXPathElement(JObject jObject):this(new JTokenDescriptor(jObject))
         {
-            _jObject = jObject;
         }
 
-        protected JObjectXPathElement(JToken jToken)
+        protected JObjectXPathElement(JTokenDescriptor jTokenDescriptor)
         {
-            _jObject = jToken;
+            _jTokenDescriptor = jTokenDescriptor;
         }
         
         public virtual object UnderlyingObject
         {
-            get { return _jObject; }
+            get { return _jTokenDescriptor.JToken; }
         }
 
         public virtual string GetName()
         {
-            var jProperty = _jObject as JProperty;
-            return jProperty?.Name ?? string.Empty;
+            return _jTokenDescriptor.Name;
         }
 
         public virtual IEnumerable<IXPathElement> GetChildren()
         {
-            foreach (var jToken in EnumerateExpandChildren())
+            foreach (JTokenDescriptor jTokenDescriptor in EnumerateExpandChildren().Where(jd => !jd.IsSimpleValueOfProperty))
             {
-                yield return CreateXPathElement(jToken);
+                yield return new JObjectXPathElement(jTokenDescriptor);
             }
         }
 
-        protected virtual JObjectXPathElement CreateXPathElement(JToken jArrayItem)
+        protected virtual JObjectXPathElement CreateXPathElement(JTokenDescriptor jTokenDescriptor)
         {
-            return new JObjectXPathElement(jArrayItem);
+            return new JObjectXPathElement(jTokenDescriptor);
         }
 
         public virtual IEnumerable<IXPathAttribute> GetAttributes()
         {
-            // let's get rid of proprietary Newtonsoft.Json system attributes 'type', 'valuetype' to keep consistency with classical XPath for XML
-            // it should be implemented as something like an extension
-            //if (_jObject is JProperty)
-            //{
-            //    // type of inner node, if current node is JProperty
-            //    yield return new XPathAttribute("valuetype", (_jObject as JProperty).Value.Type.ToString());
-            //}
-
-            //// type of current node
-            //yield return new XPathAttribute("type", _jObject.Type.ToString());
-
-            // yield properties with simple values
-            foreach (JToken jToken in EnumerateExpandChildren())
+            foreach (JTokenDescriptor jTokenDescriptor in EnumerateExpandChildren().Where(jd => jd.IsPropertyWithSimpleValue))
             {
-                JProperty jProperty = jToken as JProperty;
-                if (jProperty != null)
-                {
-                    JValue jValue = jProperty.Value as JValue;
-                    if (jValue != null)
-                    {
-                        yield return new XPathAttribute(jProperty.Name, Convert.ToString(jValue.Value, CultureInfo.InvariantCulture)); 
-                    }
-                }
+                yield return new XPathAttribute(jTokenDescriptor.Name, Convert.ToString(jTokenDescriptor.SimpleValue, CultureInfo.InvariantCulture));
             }
         }
 
         public string GetText()
         {
-            var jValue = GetJValue();
-            if (jValue != null)
+            if (_jTokenDescriptor.HasSimpleValue)
             {
-                return Convert.ToString(jValue.Value, CultureInfo.InvariantCulture);                
+                return Convert.ToString(_jTokenDescriptor.SimpleValue, CultureInfo.InvariantCulture);  
             }
 
             return null;
@@ -86,39 +109,21 @@ namespace AnyTreeXPath.Json
 
         public bool HasText
         {
-            get { return GetJValue() != null; }
+            get { return _jTokenDescriptor.HasSimpleValue; }
         }
-
-        private JValue GetJValue()
+        
+        private IEnumerable<JTokenDescriptor> EnumerateExpandChildren()
         {
-            if (_jObject is JValue)
-            {
-                return _jObject as JValue;
-            }
-
-            if (_jObject is JProperty)
-            {
-                var jPropertyValue = (_jObject as JProperty).Value;
-                if (jPropertyValue is JValue)
-                {
-                    return jPropertyValue as JValue;
-                }
-            }
-
-            return null;
-        }
-
-        private IEnumerable<JToken> EnumerateExpandChildren()
-        {
-            foreach (var jToken in _jObject.Children())
+            foreach (JToken jToken in _jTokenDescriptor.JToken.Children())
             {
                 // omit array object and yield array items directly
                 JArray jArray = jToken as JArray;
                 if (jArray != null)
                 {
-                    foreach (var jArrayItem in jArray.Children())
+                    for (int i = 0; i < jArray.Count; ++i)
                     {
-                        yield return jArrayItem;
+                        var jArrayItem = jArray[i];
+                        yield return new JTokenDescriptor(jArrayItem, $"_{i+1}"); // start index is 1 to keep consistency with XPath indexer
                     }
 
                     continue;
@@ -128,15 +133,89 @@ namespace AnyTreeXPath.Json
                 JObject jObject = jToken as JObject;
                 if (jObject != null)
                 {
-                    foreach (var jObjectProperty in jObject.Children())
+                    foreach (JToken jObjectProperty in jObject.Children())
                     {
-                        yield return jObjectProperty;
+                        yield return  new JTokenDescriptor(jObjectProperty);
                     }
 
                     continue;
                 }
 
-                yield return jToken;
+                yield return new JTokenDescriptor(jToken);
+            }
+        }
+
+        protected class JTokenDescriptor
+        {
+            public JToken JToken { get; }
+
+            public string Name { get; }
+
+            public object SimpleValue
+            {
+                get { return GetSimpleValue(); }
+            }
+            
+            public bool HasSimpleValue
+            {
+                get { return SimpleValue != null; }
+            }
+
+            public bool IsPropertyWithSimpleValue
+            {
+                get { return (JToken is JProperty) && SimpleValue!=null; }
+            }
+            
+            public bool IsSimpleValue
+            {
+                get { return JToken is JValue; }
+            }
+
+            public bool IsSimpleValueOfProperty
+            {
+                get { return IsSimpleValue && JToken.Parent is JProperty; }
+            }
+            
+            public JTokenDescriptor(JToken jToken, string name)
+            {
+                JToken = jToken;
+                Name = name;
+            }
+
+            public JTokenDescriptor(JToken jToken):this(jToken, GetName(jToken))
+            {
+            }
+
+            private static string GetName(JToken jToken)
+            {
+                JProperty jProperty = jToken as JProperty;
+                if (jProperty != null)
+                {
+                    return jProperty.Name;
+                }
+
+                return string.Empty;
+            }
+
+            private object GetSimpleValue()
+            {
+                JValue jValue = JToken as JValue;
+                if (jValue != null)
+                {
+                    return jValue.Value;
+                }
+
+                JProperty jProperty = JToken as JProperty;
+                if (jProperty != null)
+                {
+                    jValue = jProperty.Value as JValue;
+                    if (jValue != null)
+                    {
+                        return jValue.Value;
+                    }
+                }
+
+                return null;
             }
         }
     }
